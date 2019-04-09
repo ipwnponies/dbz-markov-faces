@@ -73,6 +73,47 @@ def process_frame(frame):
     return scaled_up_face_locations, face_names
 
 
+def tag_name(frame, name, top, right, bottom, left):
+    if DEBUG:
+        # Draw a box around the face
+        cv2.rectangle(frame, (left, top), (right, bottom), (0, 0, 255), 2)
+
+    font = cv2.FONT_HERSHEY_DUPLEX
+
+    # Make boundaries sticky, so they move less often
+    def sticky(num, quantize=100):
+        import math
+        return math.ceil(num / quantize) * quantize
+
+    top = sticky(top)
+    right = sticky(right)
+    bottom = sticky(bottom)
+    left = sticky(left)
+
+    for text in textwrap.wrap(name, 40):
+        font_scale = 0.8
+        thickness = 1
+        padding = 6
+        (text_width, text_height) = cv2.getTextSize(text, font, fontScale=font_scale, thickness=thickness)[0]
+        cv2.rectangle(
+            frame,
+            (left - padding, bottom - text_height - padding),
+            (left + text_width + padding, bottom + padding),
+            (255, 255, 255),
+            cv2.FILLED,
+        )
+        cv2.putText(
+            frame,
+            text,
+            (left, bottom),
+            font,
+            font_scale,
+            (0, 0, 0),
+            thickness=thickness,
+        )
+        bottom += text_height + padding
+
+
 def main():
     # Initialize some variables
     face_locations = []
@@ -92,8 +133,14 @@ def main():
         # Only process every other frame of video to save time
         if process_this_frame:
             face_locations, face_names = process_frame(frame)
+            for name in face_names:
+                dbz_speech.setdefault(name, next(markov_me.generate_sentence()))
 
         process_this_frame = not process_this_frame
+
+        # Display the results
+        for (top, right, bottom, left), name in zip(face_locations, face_names):
+            tag_name(frame, f'{name}: {dbz_speech[name]}', top, right, bottom, left)
 
         # Display the resulting image
         cv2.imshow('Video', frame)
