@@ -114,6 +114,55 @@ def tag_name(frame, name, top, right, bottom, left):
         bottom += text_height + padding
 
 
+@lru_cache(maxsize=1)
+def get_saiyan_hair_img():
+    return cv2.imread('assets/saiyan_hair.png', cv2.IMREAD_UNCHANGED)
+
+
+def add_mustache(frame, face_locations):
+    # Find all facial features in all the faces in the image
+    raw_face_landmarks_list = face_recognition.api._raw_face_landmarks(frame, face_locations)
+    face_landmarks_list = [[(p.x, p.y) for p in landmark.parts()] for landmark in raw_face_landmarks_list]
+
+    # Draw mustache
+    for face_landmarks in face_landmarks_list:
+
+        # top lip
+        mustache = tuple((x, y - 10) for x, y in face_landmarks[48:55])
+        cv2.polylines(frame, [numpy.array(mustache, dtype=numpy.int32)], False, (0, 0, 0), 8)
+
+    # Draw saiyan hair
+    for index, face_landmarks in enumerate(face_landmarks_list):
+        forehead_y = face_landmarks[27][1]
+
+        s_img = get_saiyan_hair_img()
+        (top, right, bottom, left) = face_locations[index]
+        poofy_hair_factor = 1.5
+        head_size = (int((right-left) * poofy_hair_factor), int((bottom - top) * poofy_hair_factor))
+        s_img = cv2.resize(s_img, head_size)
+
+        # assumes vertically alinged beccause i don't have time to linear algebra
+        head_tip = forehead_y
+
+        leftmost_face = face_landmarks[0][0] - int((s_img.shape[0] * 0.3))
+        y1, y2 = head_tip - s_img.shape[0], head_tip
+        x1, x2 = leftmost_face, leftmost_face + s_img.shape[1]
+
+        if DEBUG:
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), thickness=3)
+
+        # Don't draw if clipped
+        # Becaseu i don't know how this math works and you obviously can't draw into negative space
+        height, width = frame.shape[:2]
+        if y1 > 0 and x1 > 0 and y2 < height and x2 < width:
+            alpha_s = s_img[:, :, 3] / 255.0
+            alpha_l = 1.0 - alpha_s
+
+            for c in range(0, 3):
+                frame[y1:y2, x1:x2, c] = (alpha_s * s_img[:, :, c] +
+                                          alpha_l * frame[y1:y2, x1:x2, c])
+
+
 def main():
     # Initialize some variables
     face_locations = []
@@ -138,6 +187,7 @@ def main():
 
         process_this_frame = not process_this_frame
 
+        add_mustache(frame, face_locations)
         # Display the results
         for (top, right, bottom, left), name in zip(face_locations, face_names):
             tag_name(frame, f'{name}: {dbz_speech[name]}', top, right, bottom, left)
